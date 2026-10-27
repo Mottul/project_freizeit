@@ -1,0 +1,344 @@
+<!DOCTYPE html>
+<html lang="de" data-theme="auto">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <meta name="theme-color" content="#0f766e" media="(prefers-color-scheme: light)">
+  <meta name="theme-color" content="#0b1416" media="(prefers-color-scheme: dark)">
+  <meta name="description" content="Rentiert sich das Freizeitticket? Besuche erfassen und die Bilanz sehen.">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="Freizeitbilanz">
+  <title>Freizeitbilanz</title>
+  <link rel="manifest" href="manifest.json">
+  <link rel="icon" type="image/svg+xml" href="icon.svg">
+  <link rel="apple-touch-icon" href="icon.svg">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <header class="app-header">
+    <div class="header-inner">
+      <div class="brand">
+        <img src="icon.svg" alt="" width="30" height="30">
+        <span>Freizeitbilanz</span>
+      </div>
+      <button class="saldo-pill" id="header-saldo" data-view="bilanz" aria-label="Zur Bilanz"></button>
+    </div>
+  </header>
+
+  <main class="app-main">
+    <!-- ========== ERFASSEN ========== -->
+    <section class="view" id="view-erfassen" data-active="true" aria-labelledby="h-erfassen">
+      <h1 id="h-erfassen" class="view-title">Besuch erfassen</h1>
+
+      <div class="card">
+        <div class="date-row">
+          <label for="f-datum">Datum</label>
+          <input type="date" id="f-datum" required>
+          <button type="button" class="btn-text" id="f-heute" hidden>Heute</button>
+        </div>
+
+        <div class="search-wrap" id="search-wrap">
+          <label for="f-suche" class="visually-hidden">Ort suchen</label>
+          <svg class="search-icon" viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+          <input type="search" id="f-suche" placeholder="Ort suchen – z. B. Nordkette, Tivoli, Museum …" autocomplete="off" enterkeyhint="search">
+        </div>
+        <div class="kat-chips" id="kat-chips" role="group" aria-label="Nach Kategorie filtern"></div>
+        <ul class="result-list" id="result-list" role="listbox" aria-label="Orte"></ul>
+      </div>
+
+      <form class="card ticket-form" id="ticket-form" hidden>
+        <div class="ort-head">
+          <span class="ort-icon" id="f-ort-icon" aria-hidden="true"></span>
+          <div class="ort-text">
+            <strong id="f-ort-name"></strong>
+            <span id="f-ort-sub" class="muted"></span>
+          </div>
+          <button type="button" class="icon-btn" id="f-ort-wechseln" aria-label="Anderen Ort wählen">
+            <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+          </button>
+        </div>
+
+        <fieldset class="field">
+          <legend>Welches Ticket?</legend>
+          <div class="ticket-chips" id="f-tickets"></div>
+        </fieldset>
+
+        <div class="person-grid">
+          <div class="person-row">
+            <div class="person-label">
+              <span class="person-icon" aria-hidden="true">🧑</span>
+              <span><strong>Erwachsene</strong><span class="muted small">Preis je Ticket</span></span>
+            </div>
+            <div class="stepper" data-stepper="erw">
+              <button type="button" data-step="-1" aria-label="Erwachsene weniger">−</button>
+              <output id="f-erw" aria-live="polite">1</output>
+              <button type="button" data-step="1" aria-label="Erwachsene mehr">+</button>
+            </div>
+            <div class="money-input">
+              <input type="text" inputmode="decimal" id="f-preis-erw" aria-label="Preis Erwachsenenticket">
+              <span>€</span>
+            </div>
+          </div>
+          <div class="person-row">
+            <div class="person-label">
+              <span class="person-icon" aria-hidden="true">🧒</span>
+              <span><strong>Kinder</strong><span class="muted small">Preis je Ticket</span></span>
+            </div>
+            <div class="stepper" data-stepper="kind">
+              <button type="button" data-step="-1" aria-label="Kinder weniger">−</button>
+              <output id="f-kind" aria-live="polite">2</output>
+              <button type="button" data-step="1" aria-label="Kinder mehr">+</button>
+            </div>
+            <div class="money-input">
+              <input type="text" inputmode="decimal" id="f-preis-kind" aria-label="Preis Kinderticket">
+              <span>€</span>
+            </div>
+          </div>
+        </div>
+
+        <p class="hint" id="f-preis-hint">Preise sind Richtwerte – tippe sie an, um sie zu korrigieren. Die App merkt sich deinen Preis für das nächste Mal.</p>
+
+        <div class="form-summe">
+          <span>Wert dieses Besuchs</span>
+          <strong id="f-summe">0,00 €</strong>
+        </div>
+
+        <div class="form-actions">
+          <button type="button" class="btn-secondary" id="f-abbrechen" hidden>Abbrechen</button>
+          <button type="submit" class="btn-primary btn-wide" id="f-speichern">Besuch speichern</button>
+        </div>
+      </form>
+
+      <div class="card" id="zuletzt-card">
+        <div class="card-head">
+          <h2>Zuletzt erfasst</h2>
+          <button class="btn-text" data-view="besuche">Alle →</button>
+        </div>
+        <ul class="besuch-list compact" id="zuletzt-list"></ul>
+      </div>
+    </section>
+
+    <!-- ========== BILANZ ========== -->
+    <section class="view" id="view-bilanz" aria-labelledby="h-bilanz">
+      <h1 id="h-bilanz" class="view-title">Bilanz</h1>
+      <p class="muted zeitraum-text" id="b-zeitraum"></p>
+
+      <div class="card hero" id="b-hero">
+        <div class="hero-status" id="b-status"></div>
+        <div class="hero-zahl" id="b-saldo"></div>
+        <div class="hero-sub" id="b-saldo-sub"></div>
+        <div class="meter" id="b-meter" role="img">
+          <div class="meter-track"><div class="meter-fill" id="b-meter-fill"></div></div>
+          <div class="meter-mark" aria-hidden="true"><span>Ticketpreis</span></div>
+        </div>
+        <div class="hero-quote" id="b-quote"></div>
+      </div>
+
+      <div class="vergleich">
+        <div class="card vergleich-card">
+          <div class="vergleich-label">Freizeitticket kostet</div>
+          <div class="vergleich-zahl" id="b-kosten"></div>
+          <ul class="vergleich-zeilen" id="b-kosten-zeilen"></ul>
+        </div>
+        <div class="vs" aria-hidden="true">vs.</div>
+        <div class="card vergleich-card">
+          <div class="vergleich-label">Einzeltickets wären</div>
+          <div class="vergleich-zahl" id="b-wert"></div>
+          <ul class="vergleich-zeilen" id="b-wert-zeilen"></ul>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-head"><h2>Pro Ticket</h2><span class="muted small">Wert ÷ Ticketpreis</span></div>
+        <div id="b-personen"></div>
+      </div>
+
+      <div class="card">
+        <div class="card-head"><h2>Verlauf</h2><span class="muted small">gesammelter Wert</span></div>
+        <div class="verlauf" id="b-verlauf"></div>
+      </div>
+
+      <div class="kennzahlen" id="b-kennzahlen"></div>
+
+      <div class="card">
+        <div class="card-head"><h2>Nach Kategorie</h2></div>
+        <div id="b-kategorien"></div>
+      </div>
+
+      <div class="card">
+        <div class="card-head"><h2>Top-Orte</h2></div>
+        <ol class="top-list" id="b-orte"></ol>
+      </div>
+    </section>
+
+    <!-- ========== BESUCHE ========== -->
+    <section class="view" id="view-besuche" aria-labelledby="h-besuche">
+      <h1 id="h-besuche" class="view-title">Besuche</h1>
+      <div id="besuche-gruppen"></div>
+      <div class="empty-state" id="besuche-leer" hidden>
+        <p>Noch keine Besuche erfasst.</p>
+        <button class="btn-primary" data-view="erfassen">Ersten Besuch erfassen</button>
+      </div>
+    </section>
+
+    <!-- ========== EINSTELLUNGEN ========== -->
+    <section class="view" id="view-einstellungen" aria-labelledby="h-einstellungen">
+      <h1 id="h-einstellungen" class="view-title">Einstellungen</h1>
+
+      <div class="card">
+        <h2>Mein Freizeitticket</h2>
+        <div class="form-row">
+          <label for="s-tarif">Tarif-Vorlage</label>
+          <select id="s-tarif"></select>
+        </div>
+        <div class="settings-grid">
+          <label for="s-erw">Erwachsene</label>
+          <input type="number" id="s-erw" min="0" max="10" step="1" inputmode="numeric">
+          <span class="muted">×</span>
+          <div class="money-input"><input type="text" inputmode="decimal" id="s-preis-erw" aria-label="Preis Erwachsenen-Freizeitticket"><span>€</span></div>
+
+          <label for="s-kind">Kinder</label>
+          <input type="number" id="s-kind" min="0" max="10" step="1" inputmode="numeric">
+          <span class="muted">×</span>
+          <div class="money-input"><input type="text" inputmode="decimal" id="s-preis-kind" aria-label="Preis Kinder-Freizeitticket"><span>€</span></div>
+        </div>
+        <p class="hint" id="s-kosten-hint"></p>
+
+        <h3>Zeitraum der Bilanz</h3>
+        <p class="hint">Gültigkeit deiner Karte – nur Besuche in diesem Zeitraum zählen. „Bis“ leer lassen = offen.</p>
+        <div class="date-pair">
+          <label>Von <input type="date" id="s-von"></label>
+          <label>Bis <input type="date" id="s-bis"></label>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-head">
+          <h2>Orte &amp; Preise</h2>
+          <button class="btn-secondary small-btn" id="s-ort-neu">+ Neuer Ort</button>
+        </div>
+        <p class="hint">Vorlage mit Partnern rund um Innsbruck – Preise sind Richtwerte ohne Gewähr. Tippe auf einen Ort, um Tickets und Preise anzupassen.</p>
+        <label for="s-ort-filter" class="visually-hidden">Orte filtern</label>
+        <input type="search" id="s-ort-filter" placeholder="Orte filtern …">
+        <ul class="orte-list" id="s-orte"></ul>
+      </div>
+
+      <div class="card">
+        <h2>Datensicherung</h2>
+        <p class="hint">Alle Daten liegen nur auf diesem Gerät. Exportiere ab und zu ein Backup (öffnet am Handy das Teilen-Menü).</p>
+        <div class="button-row">
+          <button class="btn-primary" id="s-export">Backup exportieren</button>
+          <button class="btn-secondary" id="s-import">Backup importieren</button>
+          <input type="file" id="s-import-datei" accept=".json,application/json" hidden>
+        </div>
+      </div>
+
+      <div class="card">
+        <h2>Darstellung</h2>
+        <div class="form-row">
+          <label for="s-theme">Design</label>
+          <select id="s-theme">
+            <option value="auto">Automatisch (System)</option>
+            <option value="light">Hell</option>
+            <option value="dark">Dunkel</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="card">
+        <h2>App installieren</h2>
+        <p class="hint" id="s-install-hint">Im Browser-Menü „Zum Startbildschirm hinzufügen“ bzw. „App installieren“ wählen – danach läuft die App auch offline.</p>
+        <button class="btn-primary" id="s-install" hidden>Jetzt installieren</button>
+      </div>
+
+      <div class="card danger">
+        <h2>Zurücksetzen</h2>
+        <div class="button-row">
+          <button class="btn-secondary" id="s-orte-reset">Orte-Vorlage wiederherstellen</button>
+          <button class="btn-danger" id="s-alles-reset">Alle Daten löschen</button>
+        </div>
+      </div>
+
+      <p class="hint about">Freizeitbilanz v1.0 · Offline-PWA · Preise Freizeitticket Tirol 2026/27 laut freizeitticket.at</p>
+    </section>
+  </main>
+
+  <nav class="bottom-nav" aria-label="Navigation">
+    <button class="nav-btn" data-view="erfassen" aria-current="page">
+      <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><line x1="12" y1="8" x2="12" y2="16"/><line x1="8" y1="12" x2="16" y2="12"/></svg>
+      <span>Erfassen</span>
+    </button>
+    <button class="nav-btn" data-view="bilanz">
+      <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 3v18h18"/><path d="M7 15l4-4 3 3 5-6"/></svg>
+      <span>Bilanz</span>
+    </button>
+    <button class="nav-btn" data-view="besuche">
+      <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><circle cx="4" cy="6" r="1"/><circle cx="4" cy="12" r="1"/><circle cx="4" cy="18" r="1"/></svg>
+      <span>Besuche</span>
+    </button>
+    <button class="nav-btn" data-view="einstellungen">
+      <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+      <span>Mehr</span>
+    </button>
+  </nav>
+
+  <!-- ========== ORT-DIALOG ========== -->
+  <dialog class="modal" id="ort-dialog" aria-labelledby="ort-dialog-titel">
+    <form method="dialog" id="ort-form">
+      <div class="modal-header">
+        <h2 id="ort-dialog-titel">Ort bearbeiten</h2>
+        <button type="button" class="icon-btn" data-close aria-label="Schließen">
+          <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+        </button>
+      </div>
+      <div class="modal-body">
+        <div class="form-row">
+          <label for="o-name">Name</label>
+          <input type="text" id="o-name" required maxlength="80" placeholder="z. B. Alpenzoo">
+        </div>
+        <div class="form-row">
+          <label for="o-gemeinde">Ort / Gemeinde</label>
+          <input type="text" id="o-gemeinde" maxlength="80" placeholder="z. B. Innsbruck">
+        </div>
+        <div class="form-row">
+          <label for="o-kat">Kategorie</label>
+          <select id="o-kat"></select>
+        </div>
+        <div class="o-tickets-head">
+          <span>Ticket</span><span>Erw. €</span><span>Kind €</span><span></span>
+        </div>
+        <div id="o-tickets"></div>
+        <button type="button" class="btn-text" id="o-ticket-neu">+ Ticket hinzufügen</button>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn-danger" id="o-loeschen">Löschen</button>
+        <div class="spacer"></div>
+        <button type="button" class="btn-secondary" data-close>Abbrechen</button>
+        <button type="submit" class="btn-primary" id="o-speichern">Speichern</button>
+      </div>
+    </form>
+  </dialog>
+
+  <!-- ========== BESTÄTIGEN ========== -->
+  <dialog class="modal small" id="confirm-dialog" aria-labelledby="confirm-titel">
+    <div class="modal-body">
+      <h2 id="confirm-titel">Bestätigen</h2>
+      <p id="confirm-text"></p>
+    </div>
+    <div class="modal-footer">
+      <div class="spacer"></div>
+      <button type="button" class="btn-secondary" id="confirm-nein">Abbrechen</button>
+      <button type="button" class="btn-danger" id="confirm-ja">OK</button>
+    </div>
+  </dialog>
+
+  <div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
+  <div class="chart-tooltip" id="chart-tooltip" hidden></div>
+
+  <script src="data.js"></script>
+  <script src="bilanz.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>

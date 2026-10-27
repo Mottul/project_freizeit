@@ -1,0 +1,17 @@
+{
+  "name": "Freizeitbilanz – Rentiert sich das Freizeitticket?",
+  "short_name": "Freizeitbilanz",
+  "description": "Besuche mit dem Freizeitticket erfassen und sehen, ob es sich rentiert – offline nutzbar",
+  "start_url": "./index.html",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait-primary",
+  "background_color": "#f4f6f5",
+  "theme_color": "#0f766e",
+  "lang": "de",
+  "categories": ["finance", "lifestyle", "utilities"],
+  "icons": [
+    { "src": "icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" },
+    { "src": "icon-maskable.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "maskable" }
+  ]
+}
