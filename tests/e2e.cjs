@@ -37,7 +37,28 @@ function server() {
   page.on('console', (m) => m.type() === 'error' && fehler.push(m.text()));
   const shot = async (name) => OUT && page.screenshot({ path: path.join(OUT, name + '.png'), fullPage: true });
 
+  // Alter Stand (erste Vorlage, ohne Zeitraum) wird beim Start auf die neue Vorlage gehoben
   await page.goto(url);
+  await page.evaluate(() => {
+    localStorage.setItem('freizeitbilanz-v1', JSON.stringify({
+      version: 1,
+      einstellungen: { personen: { tarif: 'vv-familie', erwachsene: 1, kinder: 2, preisErw: 789, preisKind: 155 }, zeitraum: { von: '', bis: '' }, theme: 'auto' },
+      orte: [{ id: 'nordkette', name: 'Nordkette', gemeinde: 'Innsbruck', kat: 'bergbahn', tickets: [{ id: 'alt', name: 'Alt', erw: 1, kind: 1 }] },
+             { id: 'eigen-zoo', name: 'Mein Zoo', gemeinde: '', kat: 'sonstiges', eigen: true, tickets: [{ id: 't', name: 'Eintritt', erw: 15, kind: 7 }] }],
+      besuche: [],
+    }));
+  });
+  await page.reload();
+  await page.waitForSelector('#toast:not([hidden])');
+  assert.match(await page.textContent('#toast'), /Orte-Liste aktualisiert/);
+  const mig = await page.evaluate(() => JSON.parse(localStorage.getItem('freizeitbilanz-v1')));
+  assert.equal(mig.vorlage, 2);
+  assert.ok(mig.orte.length > 70);
+  assert.ok(mig.orte.some((o) => o.id === 'eigen-zoo'));
+  assert.notEqual(mig.orte.find((o) => o.id === 'nordkette').tickets[0].id, 'alt');
+  assert.deepEqual(mig.einstellungen.zeitraum, { von: '2026-10-01', bis: '2027-09-30' });
+  await page.evaluate(() => localStorage.clear());
+  await page.reload();
   // Datum = heute (Ortszeit)
   const heute = await page.evaluate(() => window.FZ.heute());
   assert.equal(await page.inputValue('#f-datum'), heute);
@@ -51,11 +72,12 @@ function server() {
   await page.click('[data-ort="nordkette"]');
   assert.equal(await page.textContent('#f-erw'), '1');
   assert.equal(await page.textContent('#f-kind'), '2');
-  assert.match(await page.textContent('#f-summe'), /96,00/);
+  assert.match(await page.textContent('#f-summe'), /123,20/); // Top of Innsbruck 56 + 2 × 33,60
+  assert.ok(await page.isVisible('#f-ort-hinweis'));
   await shot('03-formular');
   await page.click('#f-speichern');
   await page.waitForSelector('#toast:not([hidden])');
-  assert.match(await page.textContent('#toast'), /96,00/);
+  assert.match(await page.textContent('#toast'), /123,20/);
   assert.ok(await page.isHidden('#ticket-form'));
 
   // Bad mit korrigiertem Preis, nur 1 Kind; Umlaut-Suche
@@ -65,7 +87,7 @@ function server() {
   await page.click('[data-ort="hallenbad-hoettinger-au"]');
   await page.click('[data-stepper="kind"] [data-step="-1"]');
   await page.fill('#f-preis-erw', '7,20');
-  assert.match(await page.textContent('#f-summe'), /9,90/);
+  assert.match(await page.textContent('#f-summe'), /11,00/); // 7,20 + 3,80
   await page.click('#f-speichern');
 
   // Preis gemerkt
@@ -88,6 +110,27 @@ function server() {
   await page.fill('#f-datum', '2026-11-15');
   await page.click('#f-speichern');
 
+  // Ort direkt aus dem Formular bearbeiten: Name und Preis ändern, bleibt erhalten
+  await page.fill('#f-suche', 'Elferbahnen');
+  await page.click('[data-ort="elferbahnen"]');
+  assert.match(await page.textContent('#f-ort-hinweis'), /Kinderpreis nicht gefunden/);
+  await page.click('#f-ort-bearbeiten');
+  await page.fill('#o-name', 'Elferbahnen Neustift');
+  await page.locator('#o-tickets .o-ticket-row').first().locator('input').nth(2).fill('29');
+  await page.click('#o-speichern');
+  assert.equal(await page.textContent('#f-ort-name'), 'Elferbahnen Neustift');
+  assert.equal(await page.inputValue('#f-preis-kind'), '29');
+  await page.click('#f-ort-wechseln');
+  const angepasst = await page.evaluate(() => JSON.parse(localStorage.getItem('freizeitbilanz-v1')).orte.find((o) => o.id === 'elferbahnen'));
+  assert.equal(angepasst.bearbeitet, true);
+  assert.equal(angepasst.tickets[0].kind, 29);
+
+  // Ohne Preis: Warnung
+  await page.fill('#f-suche', 'hochkössen');
+  await page.click('[data-ort="hochkoessen"]');
+  assert.match(await page.textContent('#f-preis-hint'), /kein Preis hinterlegt/);
+  await page.click('#f-ort-wechseln');
+
   // Bilanz
   await page.click('.nav-btn[data-view="bilanz"]');
   const b = await page.evaluate(() => {
@@ -95,8 +138,8 @@ function server() {
     return window.FZ.berechneBilanz(s.besuche, s.einstellungen, window.FZ_DATEN.KATEGORIEN);
   });
   assert.equal(b.anzahl, 3);
-  assert.equal(b.wert, 96 + 9.9 + 30);
-  assert.match(await page.textContent('#b-saldo'), /963,10/);
+  assert.equal(b.wert, 123.2 + 11 + 30);
+  assert.match(await page.textContent('#b-saldo'), /934,80/);
   assert.match(await page.textContent('#b-status'), /Noch nicht rentiert/);
   assert.equal(await page.locator('#b-kategorien .bar-row').count(), 3);
   assert.equal(await page.locator('#b-verlauf svg').count(), 1);

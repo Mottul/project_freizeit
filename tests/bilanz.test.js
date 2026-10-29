@@ -2,7 +2,7 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const FZ = require('../bilanz.js');
-const { KATEGORIEN, ORTE, TARIFE } = require('../data.js');
+const { KATEGORIEN, ORTE, TARIFE, VORLAGE_VERSION, GUELTIGKEIT } = require('../data.js');
 
 const einstellungen = {
   personen: { tarif: 'vv-familie', erwachsene: 1, kinder: 2, preisErw: 789, preisKind: 155 },
@@ -34,8 +34,9 @@ test('Suche findet über Umlaute, Gemeinde, Kategorie und Ticket', () => {
   assert.ok(s('rangger kopfl').length === 0, 'ö muss als oe oder ö gesucht werden');
   assert.ok(s('rangger koepfl').includes('rangger-koepfl'));
   assert.ok(s('hallenbad innsbruck').length >= 3);
-  assert.ok(s('museum').includes('ferdinandeum'));
+  assert.ok(s('museum').includes('zeughaus'));
   assert.ok(s('hafelekar').includes('nordkette'));
+  assert.ok(s('eislaufen wattens').includes('eislaufplatz-wattens'));
   assert.deepEqual(s('   '), []);
 });
 
@@ -154,4 +155,56 @@ test('Was die App ausliefert, besteht ihre eigene Prüfung', () => {
     assert.equal(tids.size, o.tickets.length, 'Ticket-IDs je Ort eindeutig: ' + o.id);
   }
   for (const t of TARIFE) assert.ok(t.erwachsen > 0 && t.kind > 0);
+});
+
+test('Orte-Vorlage aus der Recherche: Umfang und Plausibilität', () => {
+  assert.ok(ORTE.length >= 70);
+  for (const k of ['bergbahn', 'bad', 'eislauf', 'museum']) assert.ok(ORTE.some((o) => o.kat === k), k);
+  for (const o of ORTE) {
+    assert.ok(o.tickets.length >= 1, o.id);
+    for (const t of o.tickets) {
+      assert.ok(!/saisonkarte|jahreskarte|block|\d\s*tage\b/i.test(t.name), 'keine Mehrfachkarten: ' + o.id + ' ' + t.name);
+      assert.ok(t.erw >= 0 && t.erw < 200 && t.kind >= 0 && t.kind < 200, o.id + ' ' + t.name);
+    }
+    if (o.link) assert.match(o.link, /^https:\/\/www\.freizeitticket\.at\//);
+  }
+  // Alte IDs aus der ersten Vorlage bleiben, damit Besuche ihren Ort finden
+  for (const id of ['nordkette', 'patscherkofel', 'tivoli', 'hallenbad-hoettinger-au', 'parkbad-hall', 'tirol-panorama', 'olympiaworld-eis']) {
+    assert.ok(ORTE.some((o) => o.id === id), id);
+  }
+});
+
+test('aktualisiereVorlage: neue Vorlage, eigene und angepasste Orte bleiben, Zeitraum gesetzt', () => {
+  const stand = FZ.pruefeStand(
+    {
+      einstellungen,
+      orte: [
+        { id: 'nordkette', name: 'Nordkette alt', kat: 'bergbahn', tickets: [{ id: 'a', name: 'Alt', erw: 1, kind: 1 }] },
+        { id: 'tivoli', name: 'Mein Tivoli', kat: 'bad', bearbeitet: true, tickets: [{ id: 'a', name: 'Tag', erw: 7, kind: 3 }] },
+        { id: 'eigen-x', name: 'Eigen', kat: 'sonstiges', eigen: true, tickets: [{ id: 'a', name: 'T', erw: 5, kind: 2 }] },
+        { id: 'ferdinandeum', name: 'Weg', kat: 'museum', tickets: [{ id: 'a', name: 'T', erw: 5, kind: 0 }] },
+      ],
+      besuche: [besuch('b1', '2026-10-20', 'bad', 1, 2, 7, 3, 'tivoli')],
+    },
+    einstellungen,
+    KATEGORIEN,
+  );
+  assert.equal(stand.vorlage, 1);
+  assert.equal(FZ.aktualisiereVorlage(stand, ORTE, VORLAGE_VERSION, GUELTIGKEIT), true);
+  assert.equal(stand.vorlage, VORLAGE_VERSION);
+  assert.equal(stand.orte.find((o) => o.id === 'nordkette').name, 'Nordkette');
+  assert.equal(stand.orte.find((o) => o.id === 'tivoli').name, 'Mein Tivoli');
+  assert.ok(stand.orte.some((o) => o.id === 'eigen-x'));
+  assert.ok(!stand.orte.some((o) => o.id === 'ferdinandeum'));
+  assert.equal(stand.orte.length, ORTE.length + 1);
+  assert.deepEqual(stand.einstellungen.zeitraum, GUELTIGKEIT);
+  assert.equal(stand.besuche.length, 1);
+  // zweiter Lauf ändert nichts
+  assert.equal(FZ.aktualisiereVorlage(stand, ORTE, VORLAGE_VERSION, GUELTIGKEIT), false);
+});
+
+test('aktualisiereVorlage lässt einen gesetzten Zeitraum in Ruhe', () => {
+  const s = FZ.pruefeStand({ einstellungen: { ...einstellungen, zeitraum: { von: '2026-11-01', bis: '' } }, orte: [], besuche: [] }, einstellungen, KATEGORIEN);
+  FZ.aktualisiereVorlage(s, ORTE, VORLAGE_VERSION, GUELTIGKEIT);
+  assert.deepEqual(s.einstellungen.zeitraum, { von: '2026-11-01', bis: '' });
 });

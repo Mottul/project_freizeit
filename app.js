@@ -1,13 +1,13 @@
 (function () {
   'use strict';
 
-  const { TARIFE, KATEGORIEN, ORTE } = window.FZ_DATEN;
+  const { TARIFE, KATEGORIEN, ORTE, VORLAGE_VERSION, GUELTIGKEIT } = window.FZ_DATEN;
   const FZ = window.FZ;
   const SPEICHER = 'freizeitbilanz-v1';
 
   const VORGABE = {
     personen: { tarif: 'vv-familie', erwachsene: 1, kinder: 2, preisErw: 789, preisKind: 155 },
-    zeitraum: { von: '', bis: '' },
+    zeitraum: { ...GUELTIGKEIT },
     theme: 'auto',
   };
 
@@ -35,6 +35,7 @@
 
   // ---------- Zustand ----------
 
+  let vorlageAktualisiert = false;
   let stand = laden();
 
   function laden() {
@@ -45,7 +46,17 @@
       roh = null;
     }
     const s = FZ.pruefeStand(roh, VORGABE, KATEGORIEN);
-    if (!roh || !Array.isArray(roh.orte)) s.orte = kopie(ORTE);
+    if (!roh || !Array.isArray(roh.orte)) {
+      s.orte = kopie(ORTE);
+      s.vorlage = VORLAGE_VERSION;
+    } else if (FZ.aktualisiereVorlage(s, ORTE, VORLAGE_VERSION, GUELTIGKEIT)) {
+      vorlageAktualisiert = true;
+      try {
+        localStorage.setItem(SPEICHER, JSON.stringify(s));
+      } catch {
+        /* beim nächsten Speichern erneut */
+      }
+    }
     return s;
   }
 
@@ -227,6 +238,12 @@
     $('#f-ort-icon').textContent = k.icon;
     $('#f-ort-name').textContent = o.name;
     $('#f-ort-sub').textContent = k.name + (o.gemeinde ? ' · ' + o.gemeinde : '');
+    const hinweis = $('#f-ort-hinweis');
+    hinweis.hidden = !o.hinweis && !o.link;
+    hinweis.innerHTML =
+      (o.hinweis ? `<span>${esc(o.hinweis)}</span> ` : '') +
+      (o.link ? `<a href="${esc(o.link)}" target="_blank" rel="noopener">Partnerseite ↗</a>` : '');
+    $('#f-ort-bearbeiten').hidden = !stand.orte.includes(o);
     renderTicketChips();
     const t = aktuellesTicket();
     preisErwFeld.value = preisText(vorgabe ? vorgabe.preisErw : t.erw);
@@ -291,7 +308,22 @@
     const ok = preisErw !== null && preisKind !== null;
     $('#f-summe').textContent = ok ? fmt(FZ.wertBesuch({ erw: form.erw, kind: form.kind, preisErw, preisKind })) : '–';
     $('#f-speichern').disabled = !ok || form.erw + form.kind === 0;
+    const fehlt = ok && ((form.erw > 0 && preisErw === 0) || (form.kind > 0 && preisKind === 0 && preisErw === 0));
+    $('#f-preis-hint').classList.toggle('warnung', fehlt);
+    $('#f-preis-hint').textContent = fehlt
+      ? '⚠ Für dieses Ticket ist kein Preis hinterlegt – trag den Preis ein, sonst zählt der Besuch mit 0 €.'
+      : 'Preise sind Recherche-Werte ohne Gewähr – tippe sie an, um sie zu korrigieren. Die App merkt sich deinen Preis für das nächste Mal.';
   }
+
+  $('#f-ort-bearbeiten').addEventListener('click', () => {
+    const o = form.ort;
+    if (!o || !stand.orte.includes(o)) return;
+    oeffneOrtDialog(o, '', (neu) => {
+      // Ticket behalten (falls noch vorhanden) und die eben bearbeiteten Preise übernehmen
+      const t = neu.tickets.find((x) => x.id === form.ticketId) || neu.tickets[0];
+      waehleOrt(neu, { ticketId: t.id, erw: form.erw, kind: form.kind, preisErw: t.erw, preisKind: t.kind });
+    });
+  });
 
   function formZuruecksetzen() {
     form.ort = null;
@@ -343,8 +375,10 @@
     const ort = stand.orte.find((o) => o.id === form.ort.id);
     const tk = ort && ort.tickets.find((x) => x.id === t.id);
     if (tk) {
+      const vorher = tk.erw + '/' + tk.kind;
       if (form.erw > 0) tk.erw = preisErw;
       if (form.kind > 0) tk.kind = preisKind;
+      if (!ort.eigen && vorher !== tk.erw + '/' + tk.kind) ort.bearbeitet = true;
     }
     speichern();
     const bil = aktuelleBilanz();
@@ -769,7 +803,7 @@
         return `<li><button type="button" data-ort-edit="${esc(o.id)}">
           <span aria-hidden="true">${k.icon}</span>
           <span class="o-name"><strong>${esc(o.name)}</strong><span>${o.tickets.length} ${o.tickets.length === 1 ? 'Ticket' : 'Tickets'} · ab ${fmt(Math.min(...o.tickets.map((t) => t.erw)))}${o.gemeinde ? ' · ' + esc(o.gemeinde) : ''}</span></span>
-          ${o.eigen ? '<span class="badge">eigen</span>' : ''}
+          ${o.eigen ? '<span class="badge">eigen</span>' : o.bearbeitet ? '<span class="badge">angepasst</span>' : ''}
         </button></li>`;
       })
       .join('');
@@ -802,6 +836,7 @@
     $('#ort-dialog-titel').textContent = ort ? 'Ort bearbeiten' : 'Neuer Ort';
     $('#o-name').value = ort ? ort.name : name;
     $('#o-gemeinde').value = ort ? ort.gemeinde : '';
+    $('#o-hinweis').value = ort ? ort.hinweis || '' : '';
     $('#o-kat').innerHTML = KATEGORIEN.map((k) => `<option value="${k.id}">${k.icon} ${esc(k.name)}</option>`).join('');
     $('#o-kat').value = ort ? ort.kat : katFilter || 'sonstiges';
     const tickets = ort ? ort.tickets : [{ id: 'eintritt', name: 'Eintritt', erw: 0, kind: 0 }];
@@ -846,10 +881,17 @@
       toast('Bitte mindestens ein Ticket mit Namen angeben.');
       return;
     }
-    const daten = { name: name.slice(0, 80), gemeinde: $('#o-gemeinde').value.trim().slice(0, 80), kat: $('#o-kat').value, tickets };
+    const daten = {
+      name: name.slice(0, 80),
+      gemeinde: $('#o-gemeinde').value.trim().slice(0, 80),
+      kat: $('#o-kat').value,
+      tickets,
+      hinweis: $('#o-hinweis').value.trim().slice(0, 300),
+    };
     let ort;
     if (ortDialogZiel) {
       ort = Object.assign(ortDialogZiel, daten);
+      if (!ort.eigen) ort.bearbeitet = true;
     } else {
       ort = { id: neueId('eigen-'), eigen: true, ...daten };
       stand.orte.push(ort);
@@ -868,6 +910,7 @@
     const ok = await frage('Ort löschen?', `„${ort.name}“ wird aus der Liste entfernt. Bereits erfasste Besuche bleiben erhalten.`, 'Löschen');
     if (!ok) return;
     stand.orte = stand.orte.filter((o) => o !== ort);
+    if (form.ort === ort && !form.editId) formZuruecksetzen();
     speichern();
     renderOrteListe();
     toast('Ort gelöscht');
@@ -914,7 +957,11 @@
       return;
     }
     const neu = FZ.pruefeStand(roh, VORGABE, KATEGORIEN);
-    if (!Array.isArray(roh && roh.orte) || !neu.orte.length) neu.orte = stand.orte;
+    if (!Array.isArray(roh && roh.orte) || !neu.orte.length) {
+      neu.orte = stand.orte;
+      neu.vorlage = stand.vorlage;
+    }
+    FZ.aktualisiereVorlage(neu, ORTE, VORLAGE_VERSION, null);
     const ok = await frage(
       'Backup importieren?',
       `${neu.besuche.length} Besuche und ${neu.orte.length} Orte ersetzen den aktuellen Stand (${stand.besuche.length} Besuche).`,
@@ -934,6 +981,7 @@
     const ok = await frage('Orte-Vorlage wiederherstellen?', 'Orte und Preise werden auf die Vorlage zurückgesetzt, eigene Orte bleiben erhalten. Besuche bleiben unverändert.', 'Wiederherstellen');
     if (!ok) return;
     stand.orte = [...kopie(ORTE), ...stand.orte.filter((o) => o.eigen)];
+    stand.vorlage = VORLAGE_VERSION;
     speichern();
     renderOrteListe();
     toast('Vorlage wiederhergestellt');
@@ -944,6 +992,7 @@
     if (!ok) return;
     stand = FZ.pruefeStand(null, VORGABE, KATEGORIEN);
     stand.orte = kopie(ORTE);
+    stand.vorlage = VORLAGE_VERSION;
     speichern();
     wendeThemeAn();
     alleNeuZeichnen();
@@ -993,6 +1042,7 @@
   // ---------- Start ----------
 
   wendeThemeAn();
+  if (vorlageAktualisiert) toast(`Orte-Liste aktualisiert: ${ORTE.length} Partner mit Preisen`);
   renderKatChips();
   renderTreffer();
   renderZuletzt();

@@ -175,14 +175,19 @@
     if (!id || !name) return null;
     const tickets = Array.isArray(o.tickets) ? o.tickets.slice(0, 30).map(pruefeTicket).filter(Boolean) : [];
     if (!tickets.length) return null;
-    return {
+    const link = typeof o.link === 'string' && /^https:\/\/www\.freizeitticket\.at\/[\w\-./]*$/.test(o.link) ? o.link : '';
+    const ort = {
       id,
       name,
       gemeinde: text(o.gemeinde, 80),
       kat: katIds.has(o.kat) ? o.kat : 'sonstiges',
       tickets,
-      eigen: o.eigen === true,
+      hinweis: text(o.hinweis, 300),
+      link,
     };
+    if (o.eigen === true) ort.eigen = true;
+    else if (o.bearbeitet === true) ort.bearbeitet = true;
+    return ort;
   }
 
   function pruefeBesuch(b, katIds) {
@@ -254,15 +259,38 @@
         besuche.push(g);
       }
     }
+    const vorlage = Number.isInteger(r.vorlage) && r.vorlage > 0 && r.vorlage < 1000 ? r.vorlage : 1;
     return {
       version: 1,
+      vorlage,
       einstellungen: pruefeEinstellungen(r.einstellungen, vorgabeEinstellungen),
       orte,
       besuche,
     };
   }
 
-  const api = { runde, zahl, heute, istDatum, normalisiere, sucheOrte, wertBesuch, imZeitraum, berechneBilanz, pruefeStand };
+  /**
+   * Neue Orte-Vorlage übernehmen (Liste aus der Recherche ersetzt die alte Vorlage).
+   * Eigene und angepasste Orte bleiben, Besuche bleiben unverändert (sie speichern ihre Preise selbst).
+   * Ein leerer Zeitraum wird auf die Gültigkeit der Karte gesetzt.
+   */
+  function aktualisiereVorlage(stand, vorlageOrte, version, gueltigkeit) {
+    if ((stand.vorlage || 1) >= version) return false;
+    // Eigene und vom Nutzer angepasste Orte haben Vorrang vor der Vorlage
+    const behalten = new Map(stand.orte.filter((o) => o.eigen || o.bearbeitet).map((o) => [o.id, o]));
+    const neu = JSON.parse(JSON.stringify(vorlageOrte)).map((o) => behalten.get(o.id) || o);
+    const vorlageIds = new Set(vorlageOrte.map((o) => o.id));
+    stand.orte = [...neu, ...[...behalten.values()].filter((o) => !vorlageIds.has(o.id))];
+    const z = stand.einstellungen.zeitraum;
+    if (!z.von && !z.bis && gueltigkeit) {
+      z.von = gueltigkeit.von;
+      z.bis = gueltigkeit.bis;
+    }
+    stand.vorlage = version;
+    return true;
+  }
+
+  const api = { aktualisiereVorlage, runde, zahl, heute, istDatum, normalisiere, sucheOrte, wertBesuch, imZeitraum, berechneBilanz, pruefeStand };
   root.FZ = api;
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
 })(typeof globalThis !== 'undefined' ? globalThis : this);

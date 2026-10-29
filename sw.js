@@ -1,9 +1,10 @@
 // Version bei jeder Änderung an App-Dateien erhöhen, sonst bleibt der alte Stand im Cache.
-const CACHE = 'freizeitbilanz-v1';
+const CACHE = 'freizeitbilanz-v2';
 const ASSETS = [
   './',
   './index.html',
   './styles.css',
+  './orte.js',
   './data.js',
   './bilanz.js',
   './app.js',

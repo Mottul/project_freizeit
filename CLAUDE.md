@@ -8,7 +8,11 @@ Veröffentlichung: `Mottul/haushaltsplan` (GitHub Pages).
 ## Aufbau
 
 - `index.html` – alle Ansichten (Erfassen, Bilanz, Besuche, Mehr) und Dialoge.
-- `data.js` – Vorlagen: `TARIFE` (Freizeitticket-Preise), `KATEGORIEN`, `ORTE` (Richtwerte).
+- `orte.js` – **erzeugt** von `scripts/orte_aus_excel.py` aus `quellen/*.xlsx` (Partner, Einzeltarife,
+  Hinweise, Link). Nicht von Hand ändern, sondern Generator anpassen und neu erzeugen.
+- `data.js` – `TARIFE` (Freizeitticket-Preise), `KATEGORIEN`, `GUELTIGKEIT`, `VORLAGE_VERSION`
+  (erhöhen, wenn sich `orte.js` ändert → `FZ.aktualisiereVorlage` hebt bestehende Daten beim Start an;
+  eigene und vom Nutzer angepasste Orte (`eigen`/`bearbeitet`) bleiben).
 - `bilanz.js` – **reine Logik** ohne DOM (Suche, Bilanz, Prüfung importierter Daten), getestet in
   `tests/bilanz.test.js`. Neue Rechen- oder Prüflogik gehört hierher, nicht in `app.js`.
 - `app.js` – Oberfläche und Zustand (`stand` → `localStorage['freizeitbilanz-v1']`).
@@ -31,7 +35,8 @@ npm run serve            # lokaler Server
 - Gespeicherte und importierte Daten nur über `FZ.pruefeStand` übernehmen.
 - Farben nur über CSS-Variablen in `styles.css` (Hell/Dunkel/Auto), Kategorien in fester Reihenfolge,
   Status (rentiert/nicht) immer mit Symbol + Text.
-- Preise in `data.js` sind Richtwerte; Tarife des Freizeittickets mit Quelle und Saison pflegen.
+- Ortspreise sind Recherche-Stand ohne Gewähr und bleiben in der App editierbar (Name, Tickets,
+  Preise, Hinweis). Tarife des Freizeittickets mit Quelle und Saison pflegen.
 
 ## Skills
 
